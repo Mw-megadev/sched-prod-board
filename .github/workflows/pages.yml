@@ -1,0 +1,53 @@
+# Publishes app/ to GitHub Pages. Stamps the commit sha into the page.
+# Do not edit prove.yml. This file is separate.
+name: pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stamp the build sha and session
+        env:
+          SESSION: ${{ secrets.SESSION }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          sha = "${{ github.sha }}"
+          page = Path("app/index.html")
+          html = page.read_text()
+          html = html.replace('content="dev"', f'content="{sha}"', 1)
+          html = html.replace('data-testid="build-sha">dev<', f'data-testid="build-sha">{sha}<', 1)
+          if sha not in html:
+              raise SystemExit("sha stamp failed")
+          page.write_text(html)
+          session = os.environ.get("SESSION", "")
+          if not session:
+              raise SystemExit("SESSION secret missing")
+          example = Path("app/config.example.js").read_text()
+          needle = "export const SESSION = '';"
+          config = example.replace(needle, "export const SESSION = " + json.dumps(session) + ";", 1)
+          if session not in config:
+              raise SystemExit("session stamp failed")
+          Path("app/config.js").write_text(config)
+          print("stamped", sha)
+          PY
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: app
+      - id: deployment
+        uses: actions/deploy-pages@v4
