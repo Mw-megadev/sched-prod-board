@@ -11,4 +11,6 @@ h1 { margin: 0; font-size: 22px; }
 .row button { font: inherit; padding: 6px 12px; }
 [data-testid="acked"] { color: #0b6b2f; font-weight: 600; }
 [data-testid="loader"], [data-testid="empty"] { margin: 0 0 12px; color: #555; }
+[data-testid="new-bar"] { display: block; margin: 0 0 12px; padding: 8px 12px; font: inherit; text-align: left; background: #e8f0fe; border: 1px solid #c5d4f5; border-radius: 6px; cursor: pointer; }
+[data-testid="new-bar"][hidden] { display: none; }
 footer { color: #777; font-size: 13px; }

@@ -3,8 +3,11 @@ import { ack, fetchIncidents } from './api.js';
 const list = document.querySelector('[data-testid="incident-list"]');
 const loader = document.querySelector('[data-testid="loader"]');
 const empty = document.querySelector('[data-testid="empty"]');
+const bar = document.querySelector('[data-testid="new-bar"]');
 
 const acked = new Set();
+const pending = new Map();
+let shown = [];
 let refreshing = false;
 let drawn = '';
 
@@ -33,22 +36,19 @@ function ordered(incidents) {
   return [...incidents].sort((a, b) => Date.parse(b.openedAt) - Date.parse(a.openedAt));
 }
 
-function signature(incidents) {
-  return incidents
-    .map((incident) =>
-      [incident.id, incident.openedAt, incident.severity, incident.service, incident.region, incident.summary, acked.has(incident.id)].join('|'),
-    )
-    .join('\n');
+function renderBar() {
+  const count = pending.size;
+  bar.hidden = count === 0;
+  bar.textContent = count === 0 ? '' : `${count} new`;
 }
 
-function render(incidents) {
-  const rows = ordered(incidents);
-  const next = signature(rows);
+function renderList() {
+  const next = shown.map((incident) => `${incident.id}|${acked.has(incident.id)}`).join('\n');
+  empty.hidden = shown.length !== 0;
+  list.hidden = shown.length === 0;
   if (next === drawn) return;
   drawn = next;
-  empty.hidden = rows.length !== 0;
-  list.hidden = rows.length === 0;
-  list.innerHTML = rows
+  list.innerHTML = shown
     .map((incident) => {
       const severity = /^sev[1-3]$/.test(incident.severity) ? incident.severity : '';
       const action = acked.has(incident.id)
@@ -65,20 +65,53 @@ function render(incidents) {
     .join('');
 }
 
+function reveal() {
+  if (pending.size === 0) return;
+  const incoming = ordered([...pending.values()]);
+  pending.clear();
+  const incomingIds = new Set(incoming.map((incident) => incident.id));
+  shown = [...incoming, ...shown.filter((incident) => !incomingIds.has(incident.id))];
+  drawn = '';
+  renderList();
+  renderBar();
+}
+
+function applyPage(incidents) {
+  const latest = ordered(incidents);
+  if (shown.length === 0 && pending.size === 0) {
+    shown = latest;
+    renderList();
+    renderBar();
+    return;
+  }
+  const shownIds = new Set(shown.map((incident) => incident.id));
+  const latestIds = new Set(latest.map((incident) => incident.id));
+  for (const incident of latest) {
+    if (!shownIds.has(incident.id)) pending.set(incident.id, incident);
+  }
+  for (const id of [...pending.keys()]) {
+    if (!latestIds.has(id)) pending.delete(id);
+  }
+  renderBar();
+}
+
 async function refresh() {
   if (refreshing) return;
-  if (list.querySelector('[data-testid="ack"][disabled]')) return;
   refreshing = true;
   try {
     const page = await fetchIncidents();
     if (loader.isConnected) loader.remove();
-    render(page.incidents);
+    applyPage(page.incidents);
   } catch (error) {
     console.error(error);
   } finally {
     refreshing = false;
   }
 }
+
+bar.addEventListener('click', () => {
+  reveal();
+});
 
 list.addEventListener('click', async (event) => {
   const button = event.target.closest('[data-testid="ack"]');
@@ -90,11 +123,11 @@ list.addEventListener('click', async (event) => {
   try {
     const reply = await ack(id);
     acked.add(id);
-    drawn = '';
     const mark = document.createElement('span');
     mark.dataset.testid = 'acked';
     mark.textContent = 'acked';
     button.replaceWith(mark);
+    drawn = shown.map((incident) => `${incident.id}|${acked.has(incident.id)}`).join('\n');
     console.info('acked-on-board', reply.id);
   } catch (error) {
     button.disabled = false;

@@ -32,6 +32,11 @@ what just broke and takes it.
 | `ack` | the Ack button in a row |
 | `acked` | the acked mark in a row |
 | `build-sha` | the sha in the footer |
+| `new-bar` | the "N new" bar. Hidden when there is nothing new. A click brings those incidents in. |
+
+## Product decision
+
+The list holds still while it is on screen. A "N new" bar brings new incidents in on click. Ack stays on the row.
 
 ## Done
 
